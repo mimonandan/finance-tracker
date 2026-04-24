@@ -3,12 +3,21 @@
 import { addExpense, getExpenses } from '@/services/expenseService';
 
 export async function GET() {
-  const data = getExpenses();
-  return Response.json(data);
+  try {
+    const data = getExpenses();
+    return Response.json(data);
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 500 });
+  }
 }
 
 export async function POST(request) {
-  const body = await request.json();
-  const result = addExpense(body);
-  return Response.json(result);
+  try {
+    const body = await request.json();
+    const result = addExpense(body);
+
+    return Response.json(result);
+  } catch (error) {
+    return Response.json({ error: error.message }, { status: 400 });
+  }
 }
