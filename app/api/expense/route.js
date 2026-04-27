@@ -27,7 +27,7 @@ export async function GET(request) {
     });
 
   } catch (error) {
-    console.error("GET Expense Error:", error);
+    console.error(error);
 
     return Response.json(
       { success: false, data: null, error: error.message },
