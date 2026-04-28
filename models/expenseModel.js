@@ -10,6 +10,7 @@ export async function createExpense(data) {
 
 export async function findAllExpenses(filters) {
   const {
+    userId,
     category,
     minAmount,
     maxAmount,
@@ -21,39 +22,49 @@ export async function findAllExpenses(filters) {
     order
   } = filters;
 
-  const where = {};
+  const allowedSortFields = ["id", "amount", "category", "createdAt"];
 
-  if (category) {
-    where.category = category;
-  }
+  const safeSortBy = allowedSortFields.includes(sortBy)
+    ? sortBy
+    : "createdAt";
 
-  if (minAmount || maxAmount) {
-    where.amount = {};
-    if (minAmount) where.amount.gte = minAmount;
-    if (maxAmount) where.amount.lte = maxAmount;
-  }
+  const safeOrder = order === "asc" ? "asc" : "desc";
 
-  // Date filtering
-  if (startDate || endDate) {
-    where.createdAt = {};
-    if (startDate) where.createdAt.gte = new Date(startDate);
-    if (endDate) where.createdAt.lte = new Date(endDate);
-  }
+  const where = {
+    ...(userId && { userId }),
+    ...(category && { category }),
+    ...(minAmount || maxAmount
+      ? {
+          amount: {
+            ...(minAmount && { gte: minAmount }),
+            ...(maxAmount && { lte: maxAmount })
+          }
+        }
+      : {}),
+    ...(startDate || endDate
+      ? {
+          createdAt: {
+            ...(startDate && { gte: new Date(startDate) }),
+            ...(endDate && { lte: new Date(endDate) })
+          }
+        }
+      : {})
+  };
 
-  // Get total count
   const total = await prisma.expense.count({ where });
 
-  // Get paginated data
   const data = await prisma.expense.findMany({
     where,
     skip,
     take,
-    orderBy: { [sortBy]: order }
+    orderBy: { [safeSortBy]: safeOrder }
   });
+
+  //console.log("Filters in Model:", filters);
 
   return {
     total,
-    page: Math.floor(skip / take) + 1,
+    page: take ? Math.floor(skip / take) + 1 : 1,
     limit: take,
     data
   };

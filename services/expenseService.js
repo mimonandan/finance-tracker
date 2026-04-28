@@ -27,7 +27,10 @@ export async function getExpenses(query) {
     page,
     limit,
     sortBy,
-    order
+    order,
+    userId,
+    skip,
+    take
   } = query;
 
   // Defaults
@@ -44,13 +47,14 @@ export async function getExpenses(query) {
   if (isNaN(limit) || limit < 1) limit = 10;
 
   const filters = {
+    userId,
     category,
     minAmount,
     maxAmount,
     startDate,
     endDate,
-    skip: (page - 1) * limit,
-    take: limit,
+    skip,
+    take,
     sortBy,
     order
   };

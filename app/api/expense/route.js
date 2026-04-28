@@ -1,9 +1,12 @@
 // app/api/health/route.js - Controllers for the health check endpoints, utilizing the health service to provide responses.
 // Controller → handles HTTP requests and responses.
 import { addExpense, getExpenses } from '@/services/expenseService';
+import { verifyToken } from '@/lib/authMiddleware';
 
 export async function GET(request) {
   try {
+    const user = verifyToken(request); // 👈 verify token and get user information
+
     const { searchParams } = new URL(request.url);
 
     const query = {
@@ -16,6 +19,7 @@ export async function GET(request) {
       limit: searchParams.get("limit"),
       sortBy: searchParams.get("sortBy"),
       order: searchParams.get("order"),
+      userId: user.userId   // 👈 ensure we only fetch expenses for the authenticated user
     };
 
     const result = await getExpenses(query);
@@ -27,22 +31,34 @@ export async function GET(request) {
     });
 
   } catch (error) {
-    console.error(error);
-
     return Response.json(
       { success: false, data: null, error: error.message },
-      { status: 400 }
+      { status: 401 }
     );
   }
 }
 
 export async function POST(request) {
   try {
-    const body = await request.json();
-    const result = await addExpense(body);
+    const user = verifyToken(request); // 👈 verify token and get user information
 
-    return Response.json(result);
+    const body = await request.json();
+
+    const result = await addExpense({
+      ...body,
+      userId: user.userId  // 👈 associate expense with the authenticated user
+    });
+
+    return Response.json({
+      success: true,
+      data: result,
+      error: null
+    });
+
   } catch (error) {
-    return Response.json({ error: error.message }, { status: 400 });
+    return Response.json(
+      { success: false, data: null, error: error.message },
+      { status: 401 }
+    );
   }
 }
