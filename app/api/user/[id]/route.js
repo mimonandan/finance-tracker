@@ -5,47 +5,6 @@ export async function GET(request, { params }) {
     const resolvedParams = await params; 
     const userId = parseInt(resolvedParams.id);
 
-//   const user = await prisma.user.findUnique({
-//   where: { id: userId },
-//   include: {
-//     expenses: {
-//       take: 5,   // limit
-//       orderBy: { createdAt: 'desc' }
-//     },
-//     loans: {
-//       take: 5,
-//       orderBy: { createdAt: 'desc' }
-//     }
-//   }
-// });
-
-// const user = await prisma.user.findUnique({
-//   where: { id: userId },
-//   select: {
-//     id: true,
-//     name: true,
-//     email: true,
-//     expenses: {
-//       take: 5,
-//       orderBy: { createdAt: 'desc' },
-//       select: {
-//         id: true,
-//         amount: true,
-//         category: true
-//       }
-//     },
-//     loans: {
-//       take: 5,
-//       orderBy: { createdAt: 'desc' },
-//       select: {
-//         id: true,
-//         amount: true,
-//         type: true
-//       }
-//     }
-//   }
-// });
-
 const user = await prisma.user.findUnique({
   where: { id: userId },
   select: {

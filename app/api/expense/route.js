@@ -5,7 +5,7 @@ import { verifyToken } from '@/lib/authMiddleware';
 
 export async function GET(request) {
   try {
-    const user = verifyToken(request); // 👈 verify token and get user information
+    const user = verifyToken(request); // verify token and get user information
 
     const { searchParams } = new URL(request.url);
 
@@ -19,9 +19,11 @@ export async function GET(request) {
       limit: searchParams.get("limit"),
       sortBy: searchParams.get("sortBy"),
       order: searchParams.get("order"),
-      userId: user.userId   // 👈 ensure we only fetch expenses for the authenticated user
+      userId: user.role === "ADMIN" ? undefined : user.userId
     };
 
+    
+    
     const result = await getExpenses(query);
 
     return Response.json({
@@ -40,13 +42,13 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    const user = verifyToken(request); // 👈 verify token and get user information
+    const user = verifyToken(request); // verify token and get user information
 
     const body = await request.json();
 
     const result = await addExpense({
       ...body,
-      userId: user.userId  // 👈 associate expense with the authenticated user
+      userId: user.userId  // associate expense with the authenticated user
     });
 
     return Response.json({
