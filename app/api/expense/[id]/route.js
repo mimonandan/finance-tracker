@@ -64,7 +64,7 @@ export async function DELETE(request, context) {
     const params = await context.params; // ✅ REQUIRED
     const expenseId = parseInt(params.id);
     
-    console.log("Params:", params);
+    //console.log("Params:", params);
     
     if (!expenseId || isNaN(expenseId)) {
       throw new Error("Invalid expense id");
