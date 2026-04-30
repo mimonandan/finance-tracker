@@ -1,15 +1,20 @@
 import { verifyToken } from '@/lib/authMiddleware';
 import prisma from '@/lib/prisma';
 
-// UPDATE EXPENSE (PATCH)
-export async function PATCH(request, { params }) {
+// 🔹 UPDATE
+export async function PATCH(request, context) {
   try {
     const user = verifyToken(request);
 
+    const params = await context.params; // ✅ REQUIRED
     const expenseId = parseInt(params.id);
+
+    if (!expenseId || isNaN(expenseId)) {
+      throw new Error("Invalid expense id");
+    }
+
     const body = await request.json();
 
-    // Step 1 — Check if expense exists
     const expense = await prisma.expense.findUnique({
       where: { id: expenseId }
     });
@@ -21,7 +26,6 @@ export async function PATCH(request, { params }) {
       );
     }
 
-    // Step 2 — RBAC CHECK
     if (user.role !== "ADMIN" && expense.userId !== user.userId) {
       return Response.json(
         { success: false, data: null, error: "Forbidden" },
@@ -29,13 +33,12 @@ export async function PATCH(request, { params }) {
       );
     }
 
-    // Step 3 — Update expense
     const updatedExpense = await prisma.expense.update({
       where: { id: expenseId },
       data: {
-        ...(body.amount && { amount: body.amount }),
+        ...(body.amount !== undefined && { amount: body.amount }),
         ...(body.category && { category: body.category })
-    }
+      }
     });
 
     return Response.json({
@@ -53,14 +56,20 @@ export async function PATCH(request, { params }) {
 }
 
 
-// DELETE EXPENSE
-export async function DELETE(request, { params }) {
+// 🔹 DELETE
+export async function DELETE(request, context) {
   try {
     const user = verifyToken(request);
 
+    const params = await context.params; // ✅ REQUIRED
     const expenseId = parseInt(params.id);
+    
+    console.log("Params:", params);
+    
+    if (!expenseId || isNaN(expenseId)) {
+      throw new Error("Invalid expense id");
+    }
 
-    // Step 1 — Check if expense exists
     const expense = await prisma.expense.findUnique({
       where: { id: expenseId }
     });
@@ -72,7 +81,6 @@ export async function DELETE(request, { params }) {
       );
     }
 
-    // Step 2 — RBAC CHECK
     if (user.role !== "ADMIN" && expense.userId !== user.userId) {
       return Response.json(
         { success: false, data: null, error: "Forbidden" },
@@ -80,7 +88,6 @@ export async function DELETE(request, { params }) {
       );
     }
 
-    // Step 3 — Delete expense
     await prisma.expense.delete({
       where: { id: expenseId }
     });

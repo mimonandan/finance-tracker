@@ -1,6 +1,3 @@
-//services/expenseService.js - Buisness logic for the expense operations can be expanded here in the future if needed.
-// Service → handles logic and data manipulation.
-
 import { createExpense, findAllExpenses } from '@/models/expenseModel';
 
 export async function addExpense(data) {
@@ -28,23 +25,23 @@ export async function getExpenses(query) {
     limit,
     sortBy,
     order,
-    userId,
-    skip,
-    take
+    userId
   } = query;
 
-  // Defaults
-  page = page ? parseInt(page) : 1;
-  limit = limit ? parseInt(limit) : 10;
+  page = parseInt(page) || 1;
+  limit = parseInt(limit) || 10;
+
+  if (page < 1) page = 1;
+  if (limit < 1) limit = 10;
+
+  const skip = (page - 1) * limit;
+  const take = limit;
 
   sortBy = sortBy || "createdAt";
   order = order === "asc" ? "asc" : "desc";
 
   minAmount = minAmount ? parseFloat(minAmount) : undefined;
   maxAmount = maxAmount ? parseFloat(maxAmount) : undefined;
-
-  if (isNaN(page) || page < 1) page = 1;
-  if (isNaN(limit) || limit < 1) limit = 10;
 
   const filters = {
     userId,

@@ -1,11 +1,7 @@
-// Expense Model - Handles data structure + data access
-
 import prisma from '../lib/prisma';
 
 export async function createExpense(data) {
-  return prisma.expense.create({
-    data
-  });
+  return prisma.expense.create({ data });
 }
 
 export async function findAllExpenses(filters) {
@@ -55,17 +51,13 @@ export async function findAllExpenses(filters) {
 
   const data = await prisma.expense.findMany({
     where,
-    skip,
-    take,
+    skip: Number.isNaN(skip) ? 0 : skip,
+    take: Number.isNaN(take) ? 10 : take,
     orderBy: { [safeSortBy]: safeOrder }
   });
 
-  //console.log("Filters in Model:", filters);
-
   return {
     total,
-    page: take ? Math.floor(skip / take) + 1 : 1,
-    limit: take,
     data
   };
 }
