@@ -1,19 +1,31 @@
 import { createExpense, findAllExpenses } from '@/models/expenseModel';
+import { createExpenseSchema, updateExpenseSchema } from '@/validations/expenseSchema';
 
+// CREATE EXPENSE
 export async function addExpense(data) {
-  const { amount, category } = data;
+  const parsed = createExpenseSchema.safeParse(data);
 
-  if (!amount || amount <= 0) {
-    throw new Error("Amount must be greater than 0");
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0].message); // ✅ FIXED
   }
 
-  if (!category) {
-    throw new Error("Category is required");
-  }
-
-  return await createExpense(data);
+  return await createExpense(parsed.data);
 }
 
+
+// UPDATE VALIDATION
+export function validateUpdateExpense(data) {
+  const parsed = updateExpenseSchema.safeParse(data);
+
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0].message); // ✅ FIXED
+  }
+
+  return parsed.data;
+}
+
+
+// GET EXPENSES
 export async function getExpenses(query) {
   let {
     category,

@@ -1,11 +1,11 @@
-// app/api/health/route.js - Controllers for the health check endpoints, utilizing the health service to provide responses.
-// Controller → handles HTTP requests and responses.
 import { addExpense, getExpenses } from '@/services/expenseService';
 import { verifyToken } from '@/lib/authMiddleware';
 
+
+// GET
 export async function GET(request) {
   try {
-    const user = verifyToken(request); // verify token and get user information
+    const user = verifyToken(request);
 
     const { searchParams } = new URL(request.url);
 
@@ -22,8 +22,6 @@ export async function GET(request) {
       userId: user.role === "ADMIN" ? undefined : user.userId
     };
 
-    
-    
     const result = await getExpenses(query);
 
     return Response.json({
@@ -40,17 +38,25 @@ export async function GET(request) {
   }
 }
 
+
+// POST
 export async function POST(request) {
   try {
-    const user = verifyToken(request); // verify token and get user information
+    const user = verifyToken(request);
+    //console.log("User in route:", user);
 
     const body = await request.json();
 
+//     console.log("Payload to service:", {
+//   ...body,
+//   userId: user.userId
+// });
+
     const result = await addExpense({
       ...body,
-      userId: user.userId  // associate expense with the authenticated user
+      userId: user.userId
     });
-
+    
     return Response.json({
       success: true,
       data: result,
@@ -60,7 +66,7 @@ export async function POST(request) {
   } catch (error) {
     return Response.json(
       { success: false, data: null, error: error.message },
-      { status: 401 }
+      { status: 400 }
     );
   }
 }

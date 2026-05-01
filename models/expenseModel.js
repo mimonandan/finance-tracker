@@ -1,8 +1,21 @@
 import prisma from '../lib/prisma';
 
 export async function createExpense(data) {
-  return prisma.expense.create({ data });
-}
+
+  //console.log("Data in model:", data);
+
+  const { userId, amount, category } = data;
+
+  return prisma.expense.create({
+    data: {
+      amount,
+      category,
+      user: {
+        connect: { id: userId }
+      }
+    }
+  });
+} 
 
 export async function findAllExpenses(filters) {
   const {

@@ -1,5 +1,7 @@
 import { verifyToken } from '@/lib/authMiddleware';
 import prisma from '@/lib/prisma';
+import { validateUpdateExpense } from '@/services/expenseService';
+
 
 // 🔹 UPDATE
 export async function PATCH(request, context) {
@@ -9,11 +11,14 @@ export async function PATCH(request, context) {
     const params = await context.params; // ✅ REQUIRED
     const expenseId = parseInt(params.id);
 
-    if (!expenseId || isNaN(expenseId)) {
+    if (isNaN(expenseId)) {
       throw new Error("Invalid expense id");
     }
 
     const body = await request.json();
+
+    // 🔥 VALIDATION
+    const validatedData = validateUpdateExpense(body);
 
     const expense = await prisma.expense.findUnique({
       where: { id: expenseId }
@@ -26,6 +31,7 @@ export async function PATCH(request, context) {
       );
     }
 
+    // 🔥 RBAC
     if (user.role !== "ADMIN" && expense.userId !== user.userId) {
       return Response.json(
         { success: false, data: null, error: "Forbidden" },
@@ -35,10 +41,7 @@ export async function PATCH(request, context) {
 
     const updatedExpense = await prisma.expense.update({
       where: { id: expenseId },
-      data: {
-        ...(body.amount !== undefined && { amount: body.amount }),
-        ...(body.category && { category: body.category })
-      }
+      data: validatedData
     });
 
     return Response.json({
@@ -56,17 +59,15 @@ export async function PATCH(request, context) {
 }
 
 
-// 🔹 DELETE
+// 🔹 DELETE (UNCHANGED)
 export async function DELETE(request, context) {
   try {
     const user = verifyToken(request);
 
-    const params = await context.params; // ✅ REQUIRED
+    const params = await context.params;
     const expenseId = parseInt(params.id);
-    
-    //console.log("Params:", params);
-    
-    if (!expenseId || isNaN(expenseId)) {
+
+    if (isNaN(expenseId)) {
       throw new Error("Invalid expense id");
     }
 
