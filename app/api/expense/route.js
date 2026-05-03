@@ -1,7 +1,6 @@
 import { addExpense, getExpenses } from '@/services/expenseService';
 import { verifyToken } from '@/lib/authMiddleware';
 
-
 // GET
 export async function GET(request) {
   try {
@@ -38,7 +37,6 @@ export async function GET(request) {
   }
 }
 
-
 // POST
 export async function POST(request) {
   try {
@@ -69,4 +67,15 @@ export async function POST(request) {
       { status: 400 }
     );
   }
+}
+
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 200,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization"
+    }
+  });
 }
