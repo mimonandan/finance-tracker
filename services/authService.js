@@ -2,35 +2,55 @@ import jwt from 'jsonwebtoken';
 import prisma from '../lib/prisma';
 import bcrypt from 'bcrypt';
 
-const ACCESS_SECRET = process.env.ACCESS_SECRET || "access_secret";
-const REFRESH_SECRET = process.env.REFRESH_SECRET || "refresh_secret";
+const ACCESS_SECRET =
+  process.env.ACCESS_SECRET ||
+  "access_secret";
+
+const REFRESH_SECRET =
+  process.env.REFRESH_SECRET ||
+  "refresh_secret";
 
 
+// =========================
 // REGISTER USER
-export async function registerUser(data) {
-  const { name, email, password } = data;
+// =========================
 
-  if (!email || !password) {
-    throw new Error("Email and password are required");
+export async function registerUser(data) {
+
+  const {
+    name,
+    email,
+    password
+  } = data;
+
+  if (!name || !email || !password) {
+    throw new Error(
+      "Name, email and password are required"
+    );
   }
 
-  const existingUser = await prisma.user.findUnique({
-    where: { email }
-  });
+  const existingUser =
+    await prisma.user.findUnique({
+      where: { email }
+    });
 
   if (existingUser) {
-    throw new Error("User already exists");
+    throw new Error(
+      "User already exists"
+    );
   }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const hashedPassword =
+    await bcrypt.hash(password, 10);
 
-  const user = await prisma.user.create({
-    data: {
-      name,
-      email,
-      password: hashedPassword
-    }
-  });
+  const user =
+    await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword
+      }
+    });
 
   return {
     id: user.id,
@@ -40,135 +60,266 @@ export async function registerUser(data) {
 }
 
 
+// =========================
 // LOGIN USER
+// =========================
+
 export async function loginUser(data) {
-  const { email, password } = data;
 
-  const user = await prisma.user.findUnique({
-    where: { email }
-  });
+  const {
+    email,
+    password
+  } = data;
 
-  if (!user) throw new Error("Invalid credentials");
+  // Find user
+  const user =
+    await prisma.user.findUnique({
+      where: { email }
+    });
 
-  const isMatch = await bcrypt.compare(password, user.password);
-  if (!isMatch) throw new Error("Invalid credentials");
+  if (!user) {
+    throw new Error(
+      "Invalid credentials"
+    );
+  }
 
-  // Remove old sessions
+  // Verify password
+  const isMatch =
+    await bcrypt.compare(
+      password,
+      user.password
+    );
+
+  if (!isMatch) {
+    throw new Error(
+      "Invalid credentials"
+    );
+  }
+
+  // Remove previous sessions
   await prisma.refreshToken.deleteMany({
-    where: { userId: user.id }
+    where: {
+      userId: user.id
+    }
   });
 
+  // Create access token
   const accessToken = jwt.sign(
-    { userId: user.id, role: user.role },
+    {
+      userId: user.id,
+      name: user.name,
+      role: user.role
+    },
     ACCESS_SECRET,
-    { expiresIn: "15m" }
+    {
+      expiresIn: "15m"
+    }
   );
 
+  // Create refresh token
   const refreshToken = jwt.sign(
-    { userId: user.id },
+    {
+      userId: user.id,
+      name: user.name,
+      role: user.role
+    },
     REFRESH_SECRET,
-    { expiresIn: "7d" }
+    {
+      expiresIn: "7d"
+    }
   );
 
+  // Store refresh token in DB
   await prisma.refreshToken.create({
     data: {
       token: refreshToken,
       userId: user.id,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      expiresAt: new Date(
+        Date.now() +
+        7 * 24 * 60 * 60 * 1000
+      )
     }
   });
 
+  // Return auth response
   return {
     accessToken,
-    refreshToken
+    refreshToken,
+    name: user.name,
+    role: user.role
   };
 }
 
 
+// =========================
 // REFRESH ACCESS TOKEN
-export async function refreshAccessToken(refreshToken) {
+// =========================
+
+export async function refreshAccessToken(
+  refreshToken
+) {
+
   if (!refreshToken) {
-    throw new Error("Refresh token required");
+    throw new Error(
+      "Refresh token required"
+    );
   }
 
   // Step 1 — Check token exists in DB
-  const existingToken = await prisma.refreshToken.findUnique({
-    where: { token: refreshToken }
-  });
+
+  const existingToken =
+    await prisma.refreshToken.findUnique({
+      where: {
+        token: refreshToken
+      }
+    });
 
   if (!existingToken) {
-    throw new Error("Invalid refresh token");
+    throw new Error(
+      "Invalid refresh token"
+    );
   }
 
-  // Step 2 — Check DB expiry
-  if (existingToken.expiresAt < new Date()) {
+  // Step 2 — Check expiry
+
+  if (
+    existingToken.expiresAt <
+    new Date()
+  ) {
+
     // cleanup expired token
-    await prisma.refreshToken.delete({ where: { token: refreshToken } });
-    throw new Error("Refresh token expired");
+    await prisma.refreshToken.delete({
+      where: {
+        token: refreshToken
+      }
+    });
+
+    throw new Error(
+      "Refresh token expired"
+    );
   }
 
   // Step 3 — Verify JWT
+
   let decoded;
+
   try {
-    decoded = jwt.verify(refreshToken, REFRESH_SECRET);
+
+    decoded = jwt.verify(
+      refreshToken,
+      REFRESH_SECRET
+    );
+
   } catch (e) {
-    // cleanup if JWT invalid/tampered
-    await prisma.refreshToken.delete({ where: { token: refreshToken } });
-    throw new Error("Invalid refresh token");
+
+    // cleanup invalid token
+    await prisma.refreshToken.delete({
+      where: {
+        token: refreshToken
+      }
+    });
+
+    throw new Error(
+      "Invalid refresh token"
+    );
   }
 
-  // Step 4 — ROTATION: delete old token
+  // Step 4 — ROTATION
+  // Delete old refresh token
+
   await prisma.refreshToken.delete({
-    where: { token: refreshToken }
+    where: {
+      token: refreshToken
+    }
   });
 
-  // Step 5 — Issue new tokens
+  // Step 5 — Generate NEW access token
+
   const newAccessToken = jwt.sign(
-    { userId: decoded.userId, role: decoded.role },
+    {
+      userId: decoded.userId,
+      name: decoded.name,
+      role: decoded.role
+    },
     ACCESS_SECRET,
-    { expiresIn: "15m" }
+    {
+      expiresIn: "15m"
+    }
   );
+
+  // Step 6 — Generate NEW refresh token
 
   const newRefreshToken = jwt.sign(
-    { userId: decoded.userId },
+    {
+      userId: decoded.userId,
+      name: decoded.name,
+      role: decoded.role
+    },
     REFRESH_SECRET,
-    { expiresIn: "7d" }
+    {
+      expiresIn: "7d"
+    }
   );
 
-  // Step 6 — Store new refresh token
+  // Step 7 — Store NEW refresh token
+
   await prisma.refreshToken.create({
     data: {
       token: newRefreshToken,
       userId: decoded.userId,
-      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      expiresAt: new Date(
+        Date.now() +
+        7 * 24 * 60 * 60 * 1000
+      )
     }
   });
 
+  // Step 8 — Return new tokens
+
   return {
     accessToken: newAccessToken,
-    refreshToken: newRefreshToken
+    refreshToken: newRefreshToken,
+    name: decoded.name,
+    role: decoded.role
   };
 }
 
 
+// =========================
 // LOGOUT USER
-export async function logoutUser(refreshToken) {
+// =========================
+
+export async function logoutUser(
+  refreshToken
+) {
+
   if (!refreshToken) {
-    throw new Error("Refresh token required");
+    throw new Error(
+      "Refresh token required"
+    );
   }
 
-  // Step 1 — Check if token exists
-  const existingToken = await prisma.refreshToken.findUnique({
-    where: { token: refreshToken }
-  });
+  // Check token exists
+
+  const existingToken =
+    await prisma.refreshToken.findUnique({
+      where: {
+        token: refreshToken
+      }
+    });
 
   if (!existingToken) {
-    throw new Error("Invalid refresh token");
+    throw new Error(
+      "Invalid refresh token"
+    );
   }
 
-  // Step 2 — Delete token
+  // Delete token
+
   await prisma.refreshToken.delete({
-    where: { token: refreshToken }
+    where: {
+      token: refreshToken
+    }
   });
 
   return "Logged out successfully";
