@@ -1,14 +1,57 @@
 import jwt from 'jsonwebtoken';
 import prisma from '../lib/prisma';
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 const ACCESS_SECRET =
-  process.env.ACCESS_SECRET ||
-  "access_secret";
+  process.env.ACCESS_SECRET || "access_secret";
 
 const REFRESH_SECRET =
-  process.env.REFRESH_SECRET ||
-  "refresh_secret";
+  process.env.REFRESH_SECRET || "refresh_secret";
+
+
+// =========================
+// PASSWORD VALIDATION
+// =========================
+
+function validatePassword(password) {
+
+  if (!password) {
+    throw new Error("Password is required");
+  }
+
+  if (password.length < 8) {
+    throw new Error(
+      "Password must be at least 8 characters long"
+    );
+  }
+
+  if (!/[A-Z]/.test(password)) {
+    throw new Error(
+      "Password must contain at least one uppercase letter"
+    );
+  }
+
+  if (!/[a-z]/.test(password)) {
+    throw new Error(
+      "Password must contain at least one lowercase letter"
+    );
+  }
+
+  if (!/[0-9]/.test(password)) {
+    throw new Error(
+      "Password must contain at least one number"
+    );
+  }
+
+  if (!/[!@#$%^&*(),.?":{}|<>_\-\\[\]/;'+=~`]/.test(password)) {
+    throw new Error(
+      "Password must contain at least one special character"
+    );
+  }
+
+  return true;
+}
 
 
 // =========================
@@ -23,15 +66,42 @@ export async function registerUser(data) {
     password
   } = data;
 
-  if (!name || !email || !password) {
+  if (!name || !name.trim()) {
+    throw new Error("Name is required");
+  }
+
+  const normalizedName =
+    name.trim();
+
+  if (normalizedName.length < 2) {
     throw new Error(
-      "Name, email and password are required"
+      "Name must be at least 2 characters long"
     );
   }
 
+  if (!email || !email.trim()) {
+    throw new Error("Email is required");
+  }
+
+  const normalizedEmail =
+    email.trim().toLowerCase();
+
+  const emailRegex =
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  if (!emailRegex.test(normalizedEmail)) {
+    throw new Error(
+      "Please enter a valid email address"
+    );
+  }
+
+  validatePassword(password);
+
   const existingUser =
     await prisma.user.findUnique({
-      where: { email }
+      where: {
+        email: normalizedEmail
+      }
     });
 
   if (existingUser) {
@@ -46,8 +116,8 @@ export async function registerUser(data) {
   const user =
     await prisma.user.create({
       data: {
-        name,
-        email,
+        name: normalizedName,
+        email: normalizedEmail,
         password: hashedPassword
       }
     });
@@ -71,10 +141,26 @@ export async function loginUser(data) {
     password
   } = data;
 
-  // Find user
+  if (!email || !email.trim()) {
+    throw new Error(
+      "Email is required"
+    );
+  }
+
+  if (!password) {
+    throw new Error(
+      "Password is required"
+    );
+  }
+
+  const normalizedEmail =
+    email.trim().toLowerCase();
+
   const user =
     await prisma.user.findUnique({
-      where: { email }
+      where: {
+        email: normalizedEmail
+      }
     });
 
   if (!user) {
@@ -83,7 +169,6 @@ export async function loginUser(data) {
     );
   }
 
-  // Verify password
   const isMatch =
     await bcrypt.compare(
       password,
@@ -97,39 +182,43 @@ export async function loginUser(data) {
   }
 
   // Remove previous sessions
+
   await prisma.refreshToken.deleteMany({
     where: {
       userId: user.id
     }
   });
 
-  // Create access token
-  const accessToken = jwt.sign(
-    {
-      userId: user.id,
-      name: user.name,
-      role: user.role
-    },
-    ACCESS_SECRET,
-    {
-      expiresIn: "15m"
-    }
-  );
+  // Access token
 
-  // Create refresh token
-  const refreshToken = jwt.sign(
-    {
-      userId: user.id,
-      name: user.name,
-      role: user.role
-    },
-    REFRESH_SECRET,
-    {
-      expiresIn: "7d"
-    }
-  );
+  const accessToken =
+    jwt.sign(
+      {
+        userId: user.id,
+        name: user.name,
+        role: user.role
+      },
+      ACCESS_SECRET,
+      {
+        expiresIn: "15m"
+      }
+    );
 
-  // Store refresh token in DB
+  // Refresh token
+
+  const refreshToken =
+    jwt.sign(
+      {
+        userId: user.id,
+        name: user.name,
+        role: user.role
+      },
+      REFRESH_SECRET,
+      {
+        expiresIn: "7d"
+      }
+    );
+
   await prisma.refreshToken.create({
     data: {
       token: refreshToken,
@@ -141,7 +230,6 @@ export async function loginUser(data) {
     }
   });
 
-  // Return auth response
   return {
     accessToken,
     refreshToken,
@@ -165,8 +253,6 @@ export async function refreshAccessToken(
     );
   }
 
-  // Step 1 — Check token exists in DB
-
   const existingToken =
     await prisma.refreshToken.findUnique({
       where: {
@@ -180,14 +266,11 @@ export async function refreshAccessToken(
     );
   }
 
-  // Step 2 — Check expiry
-
   if (
     existingToken.expiresAt <
     new Date()
   ) {
 
-    // cleanup expired token
     await prisma.refreshToken.delete({
       where: {
         token: refreshToken
@@ -199,20 +282,18 @@ export async function refreshAccessToken(
     );
   }
 
-  // Step 3 — Verify JWT
-
   let decoded;
 
   try {
 
-    decoded = jwt.verify(
-      refreshToken,
-      REFRESH_SECRET
-    );
+    decoded =
+      jwt.verify(
+        refreshToken,
+        REFRESH_SECRET
+      );
 
   } catch (e) {
 
-    // cleanup invalid token
     await prisma.refreshToken.delete({
       where: {
         token: refreshToken
@@ -224,8 +305,7 @@ export async function refreshAccessToken(
     );
   }
 
-  // Step 4 — ROTATION
-  // Delete old refresh token
+  // Rotate old refresh token
 
   await prisma.refreshToken.delete({
     where: {
@@ -233,35 +313,31 @@ export async function refreshAccessToken(
     }
   });
 
-  // Step 5 — Generate NEW access token
+  const newAccessToken =
+    jwt.sign(
+      {
+        userId: decoded.userId,
+        name: decoded.name,
+        role: decoded.role
+      },
+      ACCESS_SECRET,
+      {
+        expiresIn: "15m"
+      }
+    );
 
-  const newAccessToken = jwt.sign(
-    {
-      userId: decoded.userId,
-      name: decoded.name,
-      role: decoded.role
-    },
-    ACCESS_SECRET,
-    {
-      expiresIn: "15m"
-    }
-  );
-
-  // Step 6 — Generate NEW refresh token
-
-  const newRefreshToken = jwt.sign(
-    {
-      userId: decoded.userId,
-      name: decoded.name,
-      role: decoded.role
-    },
-    REFRESH_SECRET,
-    {
-      expiresIn: "7d"
-    }
-  );
-
-  // Step 7 — Store NEW refresh token
+  const newRefreshToken =
+    jwt.sign(
+      {
+        userId: decoded.userId,
+        name: decoded.name,
+        role: decoded.role
+      },
+      REFRESH_SECRET,
+      {
+        expiresIn: "7d"
+      }
+    );
 
   await prisma.refreshToken.create({
     data: {
@@ -274,13 +350,205 @@ export async function refreshAccessToken(
     }
   });
 
-  // Step 8 — Return new tokens
-
   return {
     accessToken: newAccessToken,
     refreshToken: newRefreshToken,
     name: decoded.name,
     role: decoded.role
+  };
+}
+
+
+// =========================
+// FORGOT PASSWORD
+// =========================
+
+export async function forgotPassword(email) {
+
+  if (!email || !email.trim()) {
+    throw new Error(
+      "Email is required"
+    );
+  }
+
+  const normalizedEmail =
+    email.trim().toLowerCase();
+
+  const user =
+    await prisma.user.findUnique({
+      where: {
+        email: normalizedEmail
+      }
+    });
+
+  /*
+   * IMPORTANT:
+   *
+   * In production, don't reveal whether
+   * an email exists.
+   *
+   * For our development project we are
+   * returning the reset token so that
+   * we can test the complete flow without
+   * an email provider.
+   */
+
+  if (!user) {
+    return {
+      message:
+        "If an account exists with this email, a password reset request has been created."
+    };
+  }
+
+  // Remove previous reset tokens
+
+  await prisma.passwordResetToken.deleteMany({
+    where: {
+      userId: user.id
+    }
+  });
+
+  // Generate cryptographically secure token
+
+  const resetToken =
+    crypto.randomBytes(32).toString("hex");
+
+  // Hash token before storing
+
+  const tokenHash =
+    crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+
+  // Token expires in 15 minutes
+
+  const expiresAt =
+    new Date(
+      Date.now() +
+      15 * 60 * 1000
+    );
+
+  await prisma.passwordResetToken.create({
+    data: {
+      tokenHash,
+      userId: user.id,
+      expiresAt
+    }
+  });
+
+  return {
+    message:
+      "Password reset token generated successfully.",
+
+    // Development only.
+    // In production this should be sent
+    // through email instead.
+    resetToken
+  };
+}
+
+
+// =========================
+// RESET PASSWORD
+// =========================
+
+export async function resetPassword(
+  resetToken,
+  newPassword
+) {
+
+  if (!resetToken) {
+    throw new Error(
+      "Reset token is required"
+    );
+  }
+
+  // Validate new password
+
+  validatePassword(newPassword);
+
+  // Hash the received reset token
+
+  const tokenHash =
+    crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+
+  // Find reset token
+
+  const passwordResetToken =
+    await prisma.passwordResetToken.findUnique({
+      where: {
+        tokenHash
+      }
+    });
+
+  if (!passwordResetToken) {
+    throw new Error(
+      "Invalid or expired reset token"
+    );
+  }
+
+  // Check expiry
+
+  if (
+    passwordResetToken.expiresAt <
+    new Date()
+  ) {
+
+    await prisma.passwordResetToken.delete({
+      where: {
+        id: passwordResetToken.id
+      }
+    });
+
+    throw new Error(
+      "Reset token expired"
+    );
+  }
+
+  // Hash new password
+
+  const hashedPassword =
+    await bcrypt.hash(
+      newPassword,
+      10
+    );
+
+  // Update password
+
+  await prisma.user.update({
+    where: {
+      id: passwordResetToken.userId
+    },
+    data: {
+      password: hashedPassword
+    }
+  });
+
+  // IMPORTANT:
+  // Invalidate all existing sessions
+
+  await prisma.refreshToken.deleteMany({
+    where: {
+      userId: passwordResetToken.userId
+    }
+  });
+
+  // Delete reset token
+  // This makes it one-time use
+
+  await prisma.passwordResetToken.delete({
+    where: {
+      id: passwordResetToken.id
+    }
+  });
+
+  return {
+    message:
+      "Password reset successfully. Please login again."
   };
 }
 
@@ -299,8 +567,6 @@ export async function logoutUser(
     );
   }
 
-  // Check token exists
-
   const existingToken =
     await prisma.refreshToken.findUnique({
       where: {
@@ -313,8 +579,6 @@ export async function logoutUser(
       "Invalid refresh token"
     );
   }
-
-  // Delete token
 
   await prisma.refreshToken.delete({
     where: {
