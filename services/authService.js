@@ -1,7 +1,7 @@
-import jwt from 'jsonwebtoken';
-import prisma from '../lib/prisma';
-import bcrypt from 'bcrypt';
-import crypto from 'crypto';
+import jwt from "jsonwebtoken";
+import prisma from "../lib/prisma";
+import bcrypt from "bcrypt";
+import crypto from "crypto";
 
 const ACCESS_SECRET =
   process.env.ACCESS_SECRET || "access_secret";
@@ -10,9 +10,9 @@ const REFRESH_SECRET =
   process.env.REFRESH_SECRET || "refresh_secret";
 
 
-// =========================
+// ======================================================
 // PASSWORD VALIDATION
-// =========================
+// ======================================================
 
 function validatePassword(password) {
 
@@ -54,9 +54,9 @@ function validatePassword(password) {
 }
 
 
-// =========================
+// ======================================================
 // REGISTER USER
-// =========================
+// ======================================================
 
 export async function registerUser(data) {
 
@@ -65,6 +65,11 @@ export async function registerUser(data) {
     email,
     password
   } = data;
+
+
+  // ------------------------------
+  // NAME VALIDATION
+  // ------------------------------
 
   if (!name || !name.trim()) {
     throw new Error("Name is required");
@@ -78,6 +83,11 @@ export async function registerUser(data) {
       "Name must be at least 2 characters long"
     );
   }
+
+
+  // ------------------------------
+  // EMAIL VALIDATION
+  // ------------------------------
 
   if (!email || !email.trim()) {
     throw new Error("Email is required");
@@ -95,7 +105,17 @@ export async function registerUser(data) {
     );
   }
 
+
+  // ------------------------------
+  // PASSWORD VALIDATION
+  // ------------------------------
+
   validatePassword(password);
+
+
+  // ------------------------------
+  // CHECK EXISTING USER
+  // ------------------------------
 
   const existingUser =
     await prisma.user.findUnique({
@@ -110,8 +130,21 @@ export async function registerUser(data) {
     );
   }
 
+
+  // ------------------------------
+  // HASH PASSWORD
+  // ------------------------------
+
   const hashedPassword =
-    await bcrypt.hash(password, 10);
+    await bcrypt.hash(
+      password,
+      10
+    );
+
+
+  // ------------------------------
+  // CREATE USER
+  // ------------------------------
 
   const user =
     await prisma.user.create({
@@ -122,6 +155,11 @@ export async function registerUser(data) {
       }
     });
 
+
+  // ------------------------------
+  // RESPONSE
+  // ------------------------------
+
   return {
     id: user.id,
     name: user.name,
@@ -130,9 +168,9 @@ export async function registerUser(data) {
 }
 
 
-// =========================
+// ======================================================
 // LOGIN USER
-// =========================
+// ======================================================
 
 export async function loginUser(data) {
 
@@ -140,6 +178,11 @@ export async function loginUser(data) {
     email,
     password
   } = data;
+
+
+  // ------------------------------
+  // VALIDATION
+  // ------------------------------
 
   if (!email || !email.trim()) {
     throw new Error(
@@ -153,8 +196,14 @@ export async function loginUser(data) {
     );
   }
 
+
   const normalizedEmail =
     email.trim().toLowerCase();
+
+
+  // ------------------------------
+  // FIND USER
+  // ------------------------------
 
   const user =
     await prisma.user.findUnique({
@@ -169,6 +218,11 @@ export async function loginUser(data) {
     );
   }
 
+
+  // ------------------------------
+  // CHECK PASSWORD
+  // ------------------------------
+
   const isMatch =
     await bcrypt.compare(
       password,
@@ -181,13 +235,21 @@ export async function loginUser(data) {
     );
   }
 
+
+  // ------------------------------
+  // REMOVE OLD SESSIONS
+  // ------------------------------
+
   await prisma.refreshToken.deleteMany({
     where: {
       userId: user.id
     }
   });
 
-  // Access token
+
+  // ------------------------------
+  // ACCESS TOKEN
+  // ------------------------------
 
   const accessToken =
     jwt.sign(
@@ -202,7 +264,10 @@ export async function loginUser(data) {
       }
     );
 
-  // Refresh token
+
+  // ------------------------------
+  // REFRESH TOKEN
+  // ------------------------------
 
   const refreshToken =
     jwt.sign(
@@ -217,6 +282,11 @@ export async function loginUser(data) {
       }
     );
 
+
+  // ------------------------------
+  // STORE REFRESH TOKEN
+  // ------------------------------
+
   await prisma.refreshToken.create({
     data: {
       token: refreshToken,
@@ -228,28 +298,43 @@ export async function loginUser(data) {
     }
   });
 
+
+  // ------------------------------
+  // RESPONSE
+  // ------------------------------
+
   return {
     accessToken,
     refreshToken,
+    userId: user.id,
     name: user.name,
     role: user.role
   };
 }
 
 
-// =========================
+// ======================================================
 // REFRESH ACCESS TOKEN
-// =========================
+// ======================================================
 
 export async function refreshAccessToken(
   refreshToken
 ) {
+
+  // ------------------------------
+  // CHECK REFRESH TOKEN
+  // ------------------------------
 
   if (!refreshToken) {
     throw new Error(
       "Refresh token required"
     );
   }
+
+
+  // ------------------------------
+  // CHECK DATABASE
+  // ------------------------------
 
   const existingToken =
     await prisma.refreshToken.findUnique({
@@ -263,6 +348,11 @@ export async function refreshAccessToken(
       "Invalid refresh token"
     );
   }
+
+
+  // ------------------------------
+  // CHECK DATABASE EXPIRY
+  // ------------------------------
 
   if (
     existingToken.expiresAt <
@@ -280,6 +370,11 @@ export async function refreshAccessToken(
     );
   }
 
+
+  // ------------------------------
+  // VERIFY JWT
+  // ------------------------------
+
   let decoded;
 
   try {
@@ -290,7 +385,10 @@ export async function refreshAccessToken(
         REFRESH_SECRET
       );
 
-  } catch (e) {
+  } catch (error) {
+
+    // Token is invalid/tampered.
+    // Remove it from DB.
 
     await prisma.refreshToken.delete({
       where: {
@@ -303,13 +401,21 @@ export async function refreshAccessToken(
     );
   }
 
-  // Rotate old refresh token
+
+  // ------------------------------
+  // ROTATE REFRESH TOKEN
+  // ------------------------------
 
   await prisma.refreshToken.delete({
     where: {
       token: refreshToken
     }
   });
+
+
+  // ------------------------------
+  // NEW ACCESS TOKEN
+  // ------------------------------
 
   const newAccessToken =
     jwt.sign(
@@ -324,6 +430,11 @@ export async function refreshAccessToken(
       }
     );
 
+
+  // ------------------------------
+  // NEW REFRESH TOKEN
+  // ------------------------------
+
   const newRefreshToken =
     jwt.sign(
       {
@@ -337,6 +448,11 @@ export async function refreshAccessToken(
       }
     );
 
+
+  // ------------------------------
+  // STORE NEW REFRESH TOKEN
+  // ------------------------------
+
   await prisma.refreshToken.create({
     data: {
       token: newRefreshToken,
@@ -348,20 +464,32 @@ export async function refreshAccessToken(
     }
   });
 
+
+  // ------------------------------
+  // RESPONSE
+  // ------------------------------
+
   return {
     accessToken: newAccessToken,
     refreshToken: newRefreshToken,
+    userId: decoded.userId,
     name: decoded.name,
     role: decoded.role
   };
 }
 
 
-// =========================
+// ======================================================
 // FORGOT PASSWORD
-// =========================
+// ======================================================
 
-export async function forgotPassword(email) {
+export async function forgotPassword(
+  email
+) {
+
+  // ------------------------------
+  // VALIDATION
+  // ------------------------------
 
   if (!email || !email.trim()) {
     throw new Error(
@@ -369,8 +497,14 @@ export async function forgotPassword(email) {
     );
   }
 
+
   const normalizedEmail =
     email.trim().toLowerCase();
+
+
+  // ------------------------------
+  // FIND USER
+  // ------------------------------
 
   const user =
     await prisma.user.findUnique({
@@ -380,14 +514,23 @@ export async function forgotPassword(email) {
     });
 
 
+  /*
+   * Do not reveal whether an email
+   * exists in production.
+   */
+
   if (!user) {
+
     return {
       message:
         "If an account exists with this email, a password reset request has been created."
     };
   }
 
-  // Remove previous reset tokens
+
+  // ------------------------------
+  // REMOVE OLD RESET TOKENS
+  // ------------------------------
 
   await prisma.passwordResetToken.deleteMany({
     where: {
@@ -395,12 +538,20 @@ export async function forgotPassword(email) {
     }
   });
 
-  // Generate cryptographically secure token
+
+  // ------------------------------
+  // GENERATE RESET TOKEN
+  // ------------------------------
 
   const resetToken =
-    crypto.randomBytes(32).toString("hex");
+    crypto
+      .randomBytes(32)
+      .toString("hex");
 
-  // Hash token before storing
+
+  // ------------------------------
+  // HASH RESET TOKEN
+  // ------------------------------
 
   const tokenHash =
     crypto
@@ -408,13 +559,21 @@ export async function forgotPassword(email) {
       .update(resetToken)
       .digest("hex");
 
-  // Token expires in 15 minutes
+
+  // ------------------------------
+  // EXPIRY
+  // ------------------------------
 
   const expiresAt =
     new Date(
       Date.now() +
       15 * 60 * 1000
     );
+
+
+  // ------------------------------
+  // STORE HASH
+  // ------------------------------
 
   await prisma.passwordResetToken.create({
     data: {
@@ -424,26 +583,39 @@ export async function forgotPassword(email) {
     }
   });
 
+
+  // ------------------------------
+  // RESPONSE
+  // ------------------------------
+
   return {
     message:
       "Password reset token generated successfully.",
 
-    // Development only.
-    // In production this should be sent
-    // through email instead.
+    /*
+     * DEVELOPMENT ONLY.
+     *
+     * Remove resetToken from the response
+     * when email delivery is implemented.
+     */
+
     resetToken
   };
 }
 
 
-// =========================
+// ======================================================
 // RESET PASSWORD
-// =========================
+// ======================================================
 
 export async function resetPassword(
   resetToken,
   newPassword
 ) {
+
+  // ------------------------------
+  // TOKEN VALIDATION
+  // ------------------------------
 
   if (!resetToken) {
     throw new Error(
@@ -451,11 +623,19 @@ export async function resetPassword(
     );
   }
 
-  // Validate new password
 
-  validatePassword(newPassword);
+  // ------------------------------
+  // PASSWORD VALIDATION
+  // ------------------------------
 
-  // Hash the received reset token
+  validatePassword(
+    newPassword
+  );
+
+
+  // ------------------------------
+  // HASH RESET TOKEN
+  // ------------------------------
 
   const tokenHash =
     crypto
@@ -463,7 +643,10 @@ export async function resetPassword(
       .update(resetToken)
       .digest("hex");
 
-  // Find reset token
+
+  // ------------------------------
+  // FIND TOKEN
+  // ------------------------------
 
   const passwordResetToken =
     await prisma.passwordResetToken.findUnique({
@@ -472,13 +655,17 @@ export async function resetPassword(
       }
     });
 
+
   if (!passwordResetToken) {
     throw new Error(
       "Invalid or expired reset token"
     );
   }
 
-  // Check expiry
+
+  // ------------------------------
+  // CHECK EXPIRY
+  // ------------------------------
 
   if (
     passwordResetToken.expiresAt <
@@ -496,7 +683,10 @@ export async function resetPassword(
     );
   }
 
-  // Hash new password
+
+  // ------------------------------
+  // HASH NEW PASSWORD
+  // ------------------------------
 
   const hashedPassword =
     await bcrypt.hash(
@@ -504,31 +694,48 @@ export async function resetPassword(
       10
     );
 
-  // Update password
+
+  // ------------------------------
+  // UPDATE PASSWORD
+  // ------------------------------
 
   await prisma.user.update({
     where: {
       id: passwordResetToken.userId
     },
+
     data: {
       password: hashedPassword
     }
   });
 
 
+  // ------------------------------
+  // INVALIDATE ALL SESSIONS
+  // ------------------------------
+
   await prisma.refreshToken.deleteMany({
     where: {
-      userId: passwordResetToken.userId
+      userId:
+        passwordResetToken.userId
     }
   });
 
-  // Delete reset token
+
+  // ------------------------------
+  // DELETE USED RESET TOKEN
+  // ------------------------------
 
   await prisma.passwordResetToken.delete({
     where: {
       id: passwordResetToken.id
     }
   });
+
+
+  // ------------------------------
+  // RESPONSE
+  // ------------------------------
 
   return {
     message:
@@ -537,19 +744,28 @@ export async function resetPassword(
 }
 
 
-// =========================
+// ======================================================
 // LOGOUT USER
-// =========================
+// ======================================================
 
 export async function logoutUser(
   refreshToken
 ) {
+
+  // ------------------------------
+  // VALIDATION
+  // ------------------------------
 
   if (!refreshToken) {
     throw new Error(
       "Refresh token required"
     );
   }
+
+
+  // ------------------------------
+  // FIND TOKEN
+  // ------------------------------
 
   const existingToken =
     await prisma.refreshToken.findUnique({
@@ -558,11 +774,17 @@ export async function logoutUser(
       }
     });
 
+
   if (!existingToken) {
     throw new Error(
       "Invalid refresh token"
     );
   }
+
+
+  // ------------------------------
+  // DELETE TOKEN
+  // ------------------------------
 
   await prisma.refreshToken.delete({
     where: {
@@ -570,5 +792,13 @@ export async function logoutUser(
     }
   });
 
-  return "Logged out successfully";
+
+  // ------------------------------
+  // RESPONSE
+  // ------------------------------
+
+  return {
+    message:
+      "Logged out successfully"
+  };
 }
