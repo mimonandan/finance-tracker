@@ -181,8 +181,6 @@ export async function loginUser(data) {
     );
   }
 
-  // Remove previous sessions
-
   await prisma.refreshToken.deleteMany({
     where: {
       userId: user.id
@@ -381,17 +379,6 @@ export async function forgotPassword(email) {
       }
     });
 
-  /*
-   * IMPORTANT:
-   *
-   * In production, don't reveal whether
-   * an email exists.
-   *
-   * For our development project we are
-   * returning the reset token so that
-   * we can test the complete flow without
-   * an email provider.
-   */
 
   if (!user) {
     return {
@@ -528,8 +515,6 @@ export async function resetPassword(
     }
   });
 
-  // IMPORTANT:
-  // Invalidate all existing sessions
 
   await prisma.refreshToken.deleteMany({
     where: {
@@ -538,7 +523,6 @@ export async function resetPassword(
   });
 
   // Delete reset token
-  // This makes it one-time use
 
   await prisma.passwordResetToken.delete({
     where: {
